@@ -12,13 +12,19 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { log, LOG_FILE_PATH } from "./log.ts";
-import { connectAndSubscribe, disconnect } from "./ble/central.ts";
+import { connectAndSubscribe, disconnect, writeLine } from "./ble/central.ts";
 import { startHeartbeat, stopHeartbeat } from "./ble/heartbeat.ts";
 import { handleLine } from "./ble/protocol.ts";
 import {
   registerPermissionRelay,
   handleBuddyDecision,
 } from "./permission_relay.ts";
+import {
+  onVoiceStart,
+  onVoiceFrame,
+  onVoiceEnd,
+  onVoiceAbort,
+} from "./audio/voice_session.ts";
 
 const BLE_RECONNECT_DELAY_MS = 5_000;
 const BLE_INITIAL_BACKOFF_MS = 60_000;
@@ -102,7 +108,33 @@ async function bleLoop(server: Server): Promise<void> {
               void handleBuddyDecision(server, msg);
             },
             onAck: (msg) => log.debug("BLE ack", msg),
+            onVoiceStart: (msg) => {
+              const result = onVoiceStart(msg);
+              const ack = result.ok
+                ? { ack: "voice_start", ok: true }
+                : { ack: "voice_start", ok: false, error: result.error };
+              void writeLine(JSON.stringify(ack));
+            },
+            onVoiceEnd: (msg) => {
+              void (async () => {
+                const result = await onVoiceEnd(msg.sid, msg.total_chunks);
+                const ack = result.ok
+                  ? { ack: "voice_end", ok: true }
+                  : { ack: "voice_end", ok: false, error: result.error };
+                void writeLine(JSON.stringify(ack));
+              })();
+            },
+            onVoiceAbort: (msg) => {
+              onVoiceAbort(msg.sid);
+              void writeLine(JSON.stringify({ ack: "voice_session_abort", ok: true }));
+            },
           });
+        },
+        onAudioFrame: (frame) => {
+          const result = onVoiceFrame(frame.sid, frame.seq, frame.payload);
+          if (!result.ok) {
+            log.warn("voice_chunk reject", { seq: frame.seq, error: result.error });
+          }
         },
         onConnected: () => {
           backoffMs = BLE_RECONNECT_DELAY_MS; // 成功重置 backoff

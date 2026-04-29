@@ -1,10 +1,11 @@
 // BLE Central — 连接 M5StickC Plus，订阅 NUS TX，提供 RX 写入
 // 协议：buddy NUS（claude-desktop-buddy/REFERENCE.md L25-29）
-// 行解析：UTF-8 JSON-per-line，'\n' 终止；本模块只做行重组与上下行透传
-// 上层（permission_relay / heartbeat）负责 JSON 解析与业务
+// 流解析：上行流多路复用 JSON 行（'\n' 终止）+ 二进制音频帧（0xFE 0xFE magic）
+// 由 audio/audio_parser.ts 拆流；本模块只做透传 + 上下行写入
 
 import noble from "@stoprocent/noble";
 import { log } from "../log.ts";
+import { StreamParser, type AudioFrame } from "../audio/audio_parser.ts";
 
 // buddy 协议规定的 NUS service / RX / TX UUID（REFERENCE.md L25-29）
 const NUS_SERVICE = "6e400001b5a3f393e0a9e50e24dcca9e";
@@ -15,9 +16,12 @@ const NAME_PREFIX = "Claude";
 
 export type BleEvents = {
   onLine: (line: string) => void; // 收到 M5 完整 JSON 行（已去 \n）
+  onAudioFrame?: (frame: AudioFrame) => void; // 收到 M5 二进制音频帧（仅 voice 路径使用）
   onConnected: () => void;
   onDisconnected: (reason: string) => void;
 };
+
+export type { AudioFrame };
 
 type ConnectedState = {
   peripheral: Awaited<ReturnType<typeof noble.startScanningAsync>> extends never ? never : any;
@@ -25,7 +29,7 @@ type ConnectedState = {
 };
 
 let state: ConnectedState | null = null;
-let rxBuffer = "";
+let parser: StreamParser | null = null;
 
 export async function connectAndSubscribe(events: BleEvents): Promise<void> {
   await waitForState("poweredOn");
@@ -58,7 +62,8 @@ export async function connectAndSubscribe(events: BleEvents): Promise<void> {
   peripheral.once("disconnect", () => {
     log.warn("BLE: peripheral disconnected");
     state = null;
-    rxBuffer = "";
+    parser?.reset();
+    parser = null;
     events.onDisconnected("peripheral disconnect event");
   });
 
@@ -80,14 +85,14 @@ export async function connectAndSubscribe(events: BleEvents): Promise<void> {
     );
   }
 
+  parser = new StreamParser({
+    onJsonLine: (line) => events.onLine(line),
+    onAudioFrame: (frame) => events.onAudioFrame?.(frame),
+    onError: (msg) => log.warn("BLE RX parser", { error: msg }),
+  });
+
   txChar.on("data", (data: Buffer) => {
-    rxBuffer += data.toString("utf8");
-    let idx;
-    while ((idx = rxBuffer.indexOf("\n")) >= 0) {
-      const line = rxBuffer.slice(0, idx).trim();
-      rxBuffer = rxBuffer.slice(idx + 1);
-      if (line.length > 0) events.onLine(line);
-    }
+    parser?.feed(data);
   });
 
   await txChar.subscribeAsync();
@@ -112,7 +117,8 @@ export async function disconnect(): Promise<void> {
     log.warn("BLE: disconnect error", { error: String(err) });
   }
   state = null;
-  rxBuffer = "";
+  parser?.reset();
+  parser = null;
 }
 
 function waitForState(target: string): Promise<void> {
