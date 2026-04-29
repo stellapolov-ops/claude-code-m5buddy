@@ -1,0 +1,12 @@
+node_modules/
+bun.lockb
+dist/
+.DS_Store
+*.log
+
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+
+# bun.lock 应该 commit（lockfile 用于重现安装）

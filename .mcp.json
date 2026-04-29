@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "m5buddy": {
+      "command": "bun",
+      "args": [
+        "${CLAUDE_PROJECT_DIR:-.}/src/server.ts"
+      ]
+    }
+  }
+}
