@@ -40,7 +40,7 @@ Claude Code CLI 跑长任务时，每个工具调用（Bash / Write / Edit）都
 | Claude Code | **v2.1.81+**（permission relay 需要） |
 | 登录方式 | **claude.ai login**（API key / Console 不支持 channels） |
 | Bun | 1.x（`brew install oven-sh/bun/bun`） |
-| 硬件 | M5StickC Plus，已烧 [claude-desktop-buddy](../../claude-desktop-buddy/) 固件 |
+| 硬件 | M5StickC Plus，已烧 [claude-desktop-buddy](https://github.com/stellapolov-ops/claude-desktop-buddy) 固件 |
 
 ---
 
