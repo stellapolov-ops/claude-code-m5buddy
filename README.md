@@ -3,7 +3,7 @@
 把 Claude Code 触发的工具审批 prompt 通过 BLE 实时发到 M5StickC Plus，让你在物理设备上按 A 批准 / B 拒绝。
 
 - **Phase 1（审批 relay）**：本目录的实施，已通过端到端实测
-- **Phase 2（语音输入）**：独立设计文档，未实施
+- **Phase 2（语音输入）**：Day 1-4 全部实施完成，已通过端到端实测
 
 协议基于：
 - [Claude Code Channels](https://code.claude.com/docs/en/channels-reference)（research preview）
