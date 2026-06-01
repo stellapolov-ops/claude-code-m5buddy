@@ -7,7 +7,7 @@
 
 协议基于：
 - [Claude Code Channels](https://code.claude.com/docs/en/channels-reference)（research preview）
-- [buddy BLE NUS](../../claude-desktop-buddy/REFERENCE.md)
+- [buddy BLE NUS](https://github.com/stellapolov-ops/claude-desktop-buddy/blob/main/REFERENCE.md)
 
 ---
 
