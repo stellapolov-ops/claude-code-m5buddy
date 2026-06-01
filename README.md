@@ -1,11 +1,30 @@
-# m5buddy — Claude Code CLI × M5StickC Plus 远程审批
+# m5buddy
 
-把 Claude Code 触发的工具审批 prompt 通过 BLE 实时发到 M5StickC Plus，让你在物理设备上按 A 批准 / B 拒绝。
+> **把 Claude Code 拉到 M5StickC Plus 物理设备：按键审批工具调用 + 中文语音输入。**
 
-- **物理按钮审批**：A 同意 / B 拒绝，安全二态（绝不实现"以后都同意"）
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Runtime: Bun](https://img.shields.io/badge/runtime-Bun%201.x-black.svg)](https://bun.sh)
+[![Last commit](https://img.shields.io/github/last-commit/stellapolov-ops/claude-code-m5buddy)](https://github.com/stellapolov-ops/claude-code-m5buddy/commits/main)
+![Stars](https://img.shields.io/github/stars/stellapolov-ops/claude-code-m5buddy?style=social)
+
+<!-- TODO: insert demo GIF / video here once recorded -->
+
+## 解决什么问题
+
+Claude Code CLI 跑长任务时，每个工具调用（Bash / Write / Edit）都要审批——抢焦点弹窗中断思路，键盘 `1/2/3` 一按错可能误选"以后都同意"。m5buddy 把审批 prompt 通过 BLE 实时送到一个 1.14" 的物理小屏：
+
+- **按 A 批准 / B 拒绝**，**永远**只有 once / deny 二态（硬件误触保护，绝不实现"以后都同意"）
+- **长按 B 录音 → whisper 中文 / 英文转写 → 通过 Claude Code channel 推到对话**——免去手打长 prompt
+- **不抢焦点**，你正在打字 / 开视频会议都不被弹窗中断
+
+## 特性
+
+- **物理按钮审批**：A 同意 / B 拒绝，安全二态
 - **中文 / 英文语音输入**：长按 B 录音 → whisper 转写 → 推到 Claude Code 对话
 - **Draft buffer**：多段语音累积，随时 append / discard / submit
 - **Fail-open**：channel 子进程崩溃不影响 Claude Code 主流程
+
+> 需要配合 M5StickC Plus 上的 **buddy 固件**（fork 自 [anthropics/claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy)，已扩展语音功能）：[stellapolov-ops/claude-desktop-buddy](https://github.com/stellapolov-ops/claude-desktop-buddy)
 
 协议基于：
 - [Claude Code Channels](https://code.claude.com/docs/en/channels-reference)（research preview）
