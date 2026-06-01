@@ -7,6 +7,7 @@ import {
   onVoiceEnd,
   onVoiceAbort,
   activeSessionCount,
+  tickInactivity,
 } from "../src/audio/voice_session";
 import { adpcmEncode, adpcmStateReset } from "../src/audio/ima_adpcm";
 import { encodeWav } from "../src/audio/wav_writer";
@@ -109,6 +110,23 @@ describe("voice_session", () => {
     const r = onVoiceAbort("ffffffffffffffff");
     expect(r).toEqual({ ok: true });
     expect(activeSessionCount()).toBe(0);
+  });
+
+  test("tickInactivity drops sessions silent > 60s", () => {
+    onVoiceStart({ sid: SID_HEX, codec: "adpcm-ima", rate: 16000, ch: 1 });
+    expect(activeSessionCount()).toBe(1);
+    // Within window: nothing dropped.
+    const aborted0 = tickInactivity(Date.now() + 30_000);
+    expect(aborted0).toEqual([]);
+    expect(activeSessionCount()).toBe(1);
+    // Past 60s window: aborted, sid returned.
+    const aborted1 = tickInactivity(Date.now() + 61_000);
+    expect(aborted1).toEqual([SID_HEX]);
+    expect(activeSessionCount()).toBe(0);
+  });
+
+  test("tickInactivity returns empty when no sessions", () => {
+    expect(tickInactivity(Date.now() + 999_999)).toEqual([]);
   });
 });
 

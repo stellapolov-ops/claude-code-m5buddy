@@ -7,7 +7,9 @@ import {
   getDraftChars,
   onChange as onDraftChange,
   tick as draftBufferTick,
+  abortSession as abortDraftSession,
 } from "../audio/draft_buffer.ts";
+import { tickInactivity as voiceSessionTickInactivity } from "../audio/voice_session.ts";
 import { serializeSnapshot } from "./snapshot.ts";
 import { log } from "../log.ts";
 
@@ -63,10 +65,16 @@ export function startHeartbeat(): void {
   }, KEEPALIVE_MS);
 
   ttlTimer = setInterval(() => {
+    const now = Date.now();
     // checkTTL 内部清空 active 时会触发 onChange → 自动推空快照
     checkTTL();
     // Draft buffer TTL: 30s pending preview + 30min idle whole-draft.
-    draftBufferTick(Date.now());
+    draftBufferTick(now);
+    // §7.6.1 stage 1: 60s inactivity drop on stuck recording sessions.
+    // Drop matching DraftBuffer.pending too so user can still start fresh.
+    for (const sid of voiceSessionTickInactivity(now)) {
+      abortDraftSession(sid);
+    }
   }, TTL_SCAN_MS);
 
   void pushSnapshotNow();

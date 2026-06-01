@@ -26,9 +26,14 @@ interface ActiveSession {
   totalSamples: number;
   expectedSeq: number;
   startedAt: number;
+  lastFrameAt: number;
 }
 
 const sessions = new Map<string, ActiveSession>();
+
+// §7.6.1 stage 1: if no frames arrive for this long, the M5 side likely
+// died / BLE dropped mid-session — abort so a new session can begin.
+const RECORDING_INACTIVITY_MS = 60_000;
 
 const RECORDINGS_DIR = path.join(tmpdir(), "m5buddy-recordings");
 mkdirSync(RECORDINGS_DIR, { recursive: true });
@@ -53,6 +58,7 @@ export function onVoiceStart(p: VoiceStartParams): StartResult {
     log.warn("voice_start unsupported codec", { sid: p.sid, codec: p.codec });
     return { ok: false, error: "unsupported_codec" };
   }
+  const now = Date.now();
   sessions.set(p.sid, {
     sid: p.sid,
     rate: p.rate,
@@ -60,7 +66,8 @@ export function onVoiceStart(p: VoiceStartParams): StartResult {
     pcmChunks: [],
     totalSamples: 0,
     expectedSeq: 0,
-    startedAt: Date.now(),
+    startedAt: now,
+    lastFrameAt: now,
   });
   log.info("voice_start", { sid: p.sid, codec: p.codec, rate: p.rate });
   return { ok: true };
@@ -87,7 +94,27 @@ export function onVoiceFrame(
   session.pcmChunks.push(pcm);
   session.totalSamples += pcm.length;
   session.expectedSeq++;
+  session.lastFrameAt = Date.now();
   return { ok: true };
+}
+
+// §7.6.1 stage 1: drop any active session that's gone silent for too long.
+// Called from heartbeat's 5s tick. Returns the sids aborted so the caller
+// can clean up associated DraftBuffer.pending entries.
+export function tickInactivity(now: number = Date.now()): string[] {
+  const aborted: string[] = [];
+  for (const [sid, s] of sessions) {
+    if (now - s.lastFrameAt > RECORDING_INACTIVITY_MS) {
+      log.warn("voice session inactivity timeout — aborting", {
+        sid,
+        idle_ms: now - s.lastFrameAt,
+        threshold_ms: RECORDING_INACTIVITY_MS,
+      });
+      sessions.delete(sid);
+      aborted.push(sid);
+    }
+  }
+  return aborted;
 }
 
 export async function onVoiceEnd(
