@@ -26,6 +26,15 @@ import {
   onVoiceAbort,
 } from "./audio/voice_session.ts";
 import { runSttAndNotify } from "./audio/voice_postprocess.ts";
+import {
+  appendSegment,
+  discardSegment,
+  peekSubmit,
+  commitSubmit,
+  discardDraft,
+  abortSession as abortDraftSession,
+  getDraftChars,
+} from "./audio/draft_buffer.ts";
 
 const BLE_RECONNECT_DELAY_MS = 5_000;
 const BLE_INITIAL_BACKOFF_MS = 60_000;
@@ -132,7 +141,78 @@ async function bleLoop(server: Server): Promise<void> {
             },
             onVoiceAbort: (msg) => {
               onVoiceAbort(msg.sid);
+              abortDraftSession(msg.sid);
               void writeLine(JSON.stringify({ ack: "voice_session_abort", ok: true }));
+            },
+            // §6.1.2 Draft 操作
+            onVoiceSegmentAppend: (msg) => {
+              const r = appendSegment(msg.sid);
+              const ack = r.ok
+                ? { ack: "voice_segment_append", ok: true, draft_chars: r.draftChars }
+                : { ack: "voice_segment_append", ok: false, error: r.error,
+                    draft_chars: getDraftChars() };
+              void writeLine(JSON.stringify(ack));
+            },
+            onVoiceSegmentDiscard: (msg) => {
+              // §6.1.2.1 idempotent
+              const r = discardSegment(msg.sid);
+              void writeLine(JSON.stringify({
+                ack: "voice_segment_discard", ok: true, draft_chars: r.draftChars,
+              }));
+            },
+            onVoiceDraftSubmit: () => {
+              void (async () => {
+                const preview = peekSubmit();
+                if (!preview.ok) {
+                  void writeLine(JSON.stringify({
+                    ack: "voice_draft_submit", ok: false, error: preview.error,
+                    draft_chars: getDraftChars(),
+                  }));
+                  return;
+                }
+                // §6.3 PC → CLI channel notification (try first, commit on success)
+                try {
+                  await server.notification({
+                    method: "notifications/claude/channel",
+                    params: {
+                      content: preview.content,
+                      meta: {
+                        kind: "voice",
+                        draft_id: preview.draftId,
+                        segment_count: String(preview.segmentCount),
+                      },
+                    },
+                  });
+                  // Only clear segments after CLI confirms (notification didn't throw).
+                  // §6.1.2 review P2-4: keep segments intact if dispatch fails.
+                  const committed = commitSubmit(preview.draftId);
+                  log.info("draft submitted via channel notification", {
+                    draft_id: preview.draftId,
+                    segment_count: preview.segmentCount,
+                    content_chars: preview.content.length,
+                    committed,
+                  });
+                  void writeLine(JSON.stringify({
+                    ack: "voice_draft_submit", ok: true, draft_chars: 0,
+                  }));
+                } catch (err) {
+                  log.error("draft submit notification failed; segments retained", {
+                    error: String(err),
+                  });
+                  void writeLine(JSON.stringify({
+                    ack: "voice_draft_submit", ok: false, error: "submit_failed",
+                    detail: String(err).slice(0, 100),
+                    draft_chars: getDraftChars(),
+                  }));
+                }
+              })();
+            },
+            onVoiceDraftDiscard: () => {
+              // §6.1.2.1 idempotent
+              discardDraft();
+              void writeLine(JSON.stringify({
+                ack: "voice_draft_discard", ok: true, draft_chars: 0,
+              }));
             },
           });
         },

@@ -11,6 +11,7 @@ export type ActivePrompt = {
 
 export type SnapshotState = {
   active: ActivePrompt | null;
+  draftChars: number;     // §6.1.4 — only present on LCD top status bar; doesn't drive M5 state
 };
 
 export function buildSnapshot(state: SnapshotState): Record<string, unknown> {
@@ -28,6 +29,11 @@ export function buildSnapshot(state: SnapshotState): Record<string, unknown> {
       tool: state.active.tool_name,
       hint: state.active.input_preview,
     };
+  }
+
+  // §6.1.4: only emit when > 0 (append-only field, M5 ignores absence as 0).
+  if (state.draftChars > 0) {
+    snapshot.draft_chars = state.draftChars;
   }
 
   return snapshot;

@@ -42,11 +42,31 @@ const VoiceAbortSchema = z.object({
   reason: z.string().optional(),
 });
 
+// §6.1.2 Draft 操作（M5 → PC）
+const VoiceSegmentAppendSchema = z.object({
+  cmd: z.literal("voice_segment_append"),
+  sid: SidHexSchema,
+});
+const VoiceSegmentDiscardSchema = z.object({
+  cmd: z.literal("voice_segment_discard"),
+  sid: SidHexSchema,
+});
+const VoiceDraftSubmitSchema = z.object({
+  cmd: z.literal("voice_draft_submit"),
+});
+const VoiceDraftDiscardSchema = z.object({
+  cmd: z.literal("voice_draft_discard"),
+});
+
 export type PermissionDecision = z.infer<typeof PermissionDecisionSchema>;
 export type AckMessage = z.infer<typeof AckSchema>;
 export type VoiceStart = z.infer<typeof VoiceStartSchema>;
 export type VoiceEnd = z.infer<typeof VoiceEndSchema>;
 export type VoiceAbort = z.infer<typeof VoiceAbortSchema>;
+export type VoiceSegmentAppend = z.infer<typeof VoiceSegmentAppendSchema>;
+export type VoiceSegmentDiscard = z.infer<typeof VoiceSegmentDiscardSchema>;
+export type VoiceDraftSubmit = z.infer<typeof VoiceDraftSubmitSchema>;
+export type VoiceDraftDiscard = z.infer<typeof VoiceDraftDiscardSchema>;
 
 export type ProtocolHandlers = {
   onPermissionDecision: (msg: PermissionDecision) => void;
@@ -54,6 +74,10 @@ export type ProtocolHandlers = {
   onVoiceStart?: (msg: VoiceStart) => void;
   onVoiceEnd?: (msg: VoiceEnd) => void;
   onVoiceAbort?: (msg: VoiceAbort) => void;
+  onVoiceSegmentAppend?: (msg: VoiceSegmentAppend) => void;
+  onVoiceSegmentDiscard?: (msg: VoiceSegmentDiscard) => void;
+  onVoiceDraftSubmit?: (msg: VoiceDraftSubmit) => void;
+  onVoiceDraftDiscard?: (msg: VoiceDraftDiscard) => void;
 };
 
 export function handleLine(line: string, handlers: ProtocolHandlers): void {
@@ -79,6 +103,26 @@ export function handleLine(line: string, handlers: ProtocolHandlers): void {
   const voiceAbort = VoiceAbortSchema.safeParse(parsed);
   if (voiceAbort.success) {
     handlers.onVoiceAbort?.(voiceAbort.data);
+    return;
+  }
+  const segAppend = VoiceSegmentAppendSchema.safeParse(parsed);
+  if (segAppend.success) {
+    handlers.onVoiceSegmentAppend?.(segAppend.data);
+    return;
+  }
+  const segDiscard = VoiceSegmentDiscardSchema.safeParse(parsed);
+  if (segDiscard.success) {
+    handlers.onVoiceSegmentDiscard?.(segDiscard.data);
+    return;
+  }
+  const draftSubmit = VoiceDraftSubmitSchema.safeParse(parsed);
+  if (draftSubmit.success) {
+    handlers.onVoiceDraftSubmit?.(draftSubmit.data);
+    return;
+  }
+  const draftDiscard = VoiceDraftDiscardSchema.safeParse(parsed);
+  if (draftDiscard.success) {
+    handlers.onVoiceDraftDiscard?.(draftDiscard.data);
     return;
   }
 

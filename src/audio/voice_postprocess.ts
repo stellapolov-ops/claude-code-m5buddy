@@ -9,6 +9,7 @@
 // 字段集（铁律 2 / Day 2 决策）：voice_preview = {cmd, sid, text, full_chars}
 
 import { transcribe, type SttOutcome } from "./stt.ts";
+import { addPending } from "./draft_buffer.ts";
 import { log } from "../log.ts";
 
 export const MAX_PREVIEW_CODEPOINTS = 200;
@@ -51,6 +52,10 @@ async function dispatch(
 
   const fullChars = codePointLength(result.text);
   const truncated = codePointSlice(result.text, MAX_PREVIEW_CODEPOINTS);
+  // Cache the **full** transcript in the Draft Buffer (not the truncated preview).
+  // §6.1.3: text is only sent to M5 for display; the full transcript is what
+  // gets joined into the final submission. Append happens iff user short-A.
+  addPending(sid, result.text);
   const json = JSON.stringify({
     cmd: "voice_preview",
     sid,

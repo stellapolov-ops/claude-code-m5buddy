@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   runSttAndNotify,
@@ -7,8 +7,14 @@ import {
   MAX_PREVIEW_CODEPOINTS,
 } from "../src/audio/voice_postprocess";
 import { extractTranscript } from "../src/audio/stt";
+import { _resetForTest as resetDraftBuffer } from "../src/audio/draft_buffer";
 
 const SID = "0123456789abcdef";
+
+// runSttAndNotify on ok:true calls addPending() into module-level draft_buffer
+// state — must reset to avoid contaminating draft_buffer.test.ts when both
+// suites run together.
+afterEach(() => resetDraftBuffer());
 
 function captureSender(): { lines: string[]; send: (j: string) => Promise<void> } {
   const lines: string[] = [];
