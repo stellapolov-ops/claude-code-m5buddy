@@ -25,6 +25,7 @@ import {
   onVoiceEnd,
   onVoiceAbort,
 } from "./audio/voice_session.ts";
+import { runSttAndNotify } from "./audio/voice_postprocess.ts";
 
 const BLE_RECONNECT_DELAY_MS = 5_000;
 const BLE_INITIAL_BACKOFF_MS = 60_000;
@@ -122,6 +123,11 @@ async function bleLoop(server: Server): Promise<void> {
                   ? { ack: "voice_end", ok: true }
                   : { ack: "voice_end", ok: false, error: result.error };
                 void writeLine(JSON.stringify(ack));
+                // §6.1.1 ack 与 STT 解耦：ack 已发后再异步跑 STT，
+                // 完成后单独推 voice_preview / voice_error
+                if (result.ok) {
+                  void runSttAndNotify(msg.sid, result.wavPath, "zh", writeLine);
+                }
               })();
             },
             onVoiceAbort: (msg) => {
