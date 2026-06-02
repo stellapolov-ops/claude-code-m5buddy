@@ -7,7 +7,7 @@
 
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { z } from "zod";
-import { setActive, clearActive, getActive } from "./state_store.ts";
+import { enqueue, removeById, hasId } from "./state_store.ts";
 import { log } from "./log.ts";
 import type { PermissionDecision } from "./ble/protocol.ts";
 import { formatHint } from "./hint_formatter.ts";
@@ -36,7 +36,9 @@ export function registerPermissionRelay(server: Server): void {
         raw_preview: params.input_preview.slice(0, 100),
       });
 
-      setActive({
+      // v0.3.3 Bug C fix: enqueue (not overwrite). burst prompts 按 FIFO 排队，
+      // M5 verdict 一个 → removeById → 下一个 prompt 自动 promote 到 head → snapshot 推下一个
+      enqueue({
         request_id: params.request_id,
         tool_name: params.tool_name,
         description: params.description,
@@ -64,21 +66,16 @@ export async function handleBuddyDecision(
   server: Server,
   msg: PermissionDecision,
 ): Promise<void> {
-  const active = getActive();
-  if (!active) {
-    log.warn("buddy decision arrived but no active prompt; dropping", {
-      received_id: msg.id,
-      decision: msg.decision,
-    });
-    return;
-  }
-  if (msg.id !== active.request_id) {
-    // v0.3.2 §6.2.3：终端先决策 → channel server 仍持有旧 active，M5 此时按键产生 stale 决策
+  // v0.3.3 Bug C fix: verdict 针对 msg.id 精确移除，不再依赖 head==id 匹配。
+  // 这样队列里其他 pending prompt 不受影响，user 可以按 A 继续 verdict 下一个。
+  // 但 msg.id 必须在队列里：M5 LCD 可能基于 stale snapshot 显示已被 terminal pop 的 prompt，
+  // 此时按键产生的 decision 必须 drop，不能 dispatch verdict 误处理。
+  if (!hasId(msg.id)) {
     log.warn(
-      "buddy decision id mismatch; dropping (terminal may have already responded)",
+      "buddy decision id not in queue; dropping (terminal may have already responded)",
       {
         received_id: msg.id,
-        active_id: active.request_id,
+        decision: msg.decision,
       },
     );
     return;
@@ -104,15 +101,18 @@ export async function handleBuddyDecision(
       note: "may be silently dropped by Claude Code if terminal already responded",
     });
   } catch (err) {
-    // v0.3.2 §9.3：失败抛异常给上层；这里 catch 仅为了保证 finally 清 active
     log.error("verdict dispatch failed", {
       request_id: msg.id,
       error: String(err),
     });
   } finally {
-    // 无论成功失败，清空 active：
-    // - 成功：active 使命完成
-    // - 失败：避免泄漏；用户感知一致性优先；TTL 是兜底但更迟
-    clearActive("decision");
+    // 精确移除该 id：成功则使命完成；失败则避免 stale prompt 卡在队列。
+    // 若 msg.id 不在队列（user 按键时 head 已被 terminal 抢先），removeById 返回 false 即可，不影响其他 entry。
+    const removed = removeById(msg.id, "decision");
+    if (!removed) {
+      log.warn("verdict id not in queue (stale or terminal-handled)", {
+        received_id: msg.id,
+      });
+    }
   }
 }
