@@ -1,5 +1,5 @@
 // 单例内存 state；FIFO queue of pending permission prompts + 每 entry 独立 TTL
-// v0.3.3 §6.2.2 active TTL = 60s；过期清空 + 推空快照（不发 verdict）
+// v0.3.3 §6.2.2 active TTL = 180s；过期清空 + 推空快照（不发 verdict）
 // v0.3.3 Bug C 修复：burst 多 prompt 不再覆盖，按 FIFO 排队让 M5 逐个 verdict
 
 import { log } from "./log.ts";
@@ -13,7 +13,7 @@ export type ActivePrompt = {
   deadline: number;
 };
 
-const ACTIVE_TTL_MS = 60_000;
+const ACTIVE_TTL_MS = 180_000;
 
 let queue: ActivePrompt[] = [];
 let lastNotifiedHeadId: string | null = null;

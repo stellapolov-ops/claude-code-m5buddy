@@ -1,6 +1,6 @@
 // Permission Relay 模块
 // - 接收 CLI 的 notifications/claude/channel/permission_request
-// - 把 active prompt 写入 state store（带 60s TTL）
+// - 把 active prompt 写入 state store（带 180s TTL）
 // - 接收 buddy 的 cmd:permission decision，校验 id，映射 once/deny → allow/deny verdict
 //
 // v0.3.2 §5.1.2 / §5.1.3 / §6.2.1 / §11.2
